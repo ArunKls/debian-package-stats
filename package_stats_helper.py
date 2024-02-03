@@ -41,6 +41,14 @@ def process_contents_file_list(url, file_links):
     return files
 
 
+async def download_files(urls, output_dir):
+    tasks = []
+    for url in urls:
+        tasks.append(download_file(url, output_dir))
+
+    results = await asyncio.gather(*tasks)
+    return results  # Return a list of downloaded file paths
+
 
 def download_files_sync(urls, output_dir, skip_download=None):
     output_paths = []
@@ -73,6 +81,23 @@ def download_files_sync(urls, output_dir, skip_download=None):
         print(f"Error downloading {url}: {e}")
         return None
     return output_paths
+
+
+async def download_file(url, output_dir):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                filename = os.path.basename(url)
+                output_path = os.path.join(output_dir, filename)
+
+                with open(output_path, 'wb') as f:
+                    await f.write(await response.read())
+
+                return output_path
+
+            else:
+                print(f"Error fetching {url}: status code {response.status}")
+                return None
 
 
 async def decompress_file(file_path):
@@ -109,6 +134,16 @@ def filter_files(files, arch, include_udeb):
     return urls, names
 
 
+async def download_and_process_files(files, arch, include_udeb, output_dir):
+    urls = filter_files(files, arch, include_udeb)
+    print("urls", urls)
+    download_path = await download_files(urls, output_dir)
+
+    if download_path:
+        async for data in decompress_file(download_path):
+            await process_data(data)
+
+
 def download_and_process_files_sync(files, arch, include_udeb, output_dir, skip_download):
     # package_stats_dict = defaultdict(list)
     package_stats_dict = defaultdict(int)
@@ -132,6 +167,15 @@ def return_stats(package_stats, descending, count):
     for line in range(min(count, len(sorted_stats))):
         output.append(f"{sorted_stats[line][0]:50} \t {sorted_stats[line][1]}")
     return "\n".join(output)
+
+
+async def main():
+    files = get_contents_file_list(
+        "http://ftp.uk.debian.org/debian/dists/stable/main/")
+    files = process_contents_file_list(
+        "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
+    # print(files)
+    await download_and_process_files(files, "amd64", True, "./downloads")
 
 
 def main_sync():
