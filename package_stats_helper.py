@@ -7,6 +7,9 @@ import aiohttp
 import gzip
 import time
 
+BUF_SIZE = 1024
+SEC_IN_DAY = 86400
+
 
 def get_contents_file_list(url):
     try:
@@ -41,16 +44,7 @@ def process_contents_file_list(url, file_links):
     return files
 
 
-async def download_files(urls, output_dir):
-    tasks = []
-    for url in urls:
-        tasks.append(download_file(url, output_dir))
-
-    results = await asyncio.gather(*tasks)
-    return results  # Return a list of downloaded file paths
-
-
-def download_files_sync(urls, output_dir, skip_download=None):
+def download_files(urls, output_dir, skip_download=None):
     output_paths = []
     try:
         for url in urls:
@@ -59,7 +53,7 @@ def download_files_sync(urls, output_dir, skip_download=None):
             if skip_download:
                 if os.path.exists(output_path):
                     time_since_download = time.time() - os.path.getmtime(output_path)
-                    if time_since_download < skip_download * 86400:
+                    if time_since_download < skip_download * SEC_IN_DAY:
                         # print("Found file. Skipping download")
                         output_paths.append(output_path)
                         continue
@@ -67,7 +61,7 @@ def download_files_sync(urls, output_dir, skip_download=None):
 
             if response.status_code == 200:
                 with open(output_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=1024):
+                    for chunk in response.iter_content(chunk_size=BUF_SIZE):
                         f.write(chunk)
 
                 output_paths.append(output_path)
@@ -83,31 +77,7 @@ def download_files_sync(urls, output_dir, skip_download=None):
     return output_paths
 
 
-async def download_file(url, output_dir):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                filename = os.path.basename(url)
-                output_path = os.path.join(output_dir, filename)
-
-                with open(output_path, 'wb') as f:
-                    await f.write(await response.read())
-
-                return output_path
-
-            else:
-                print(f"Error fetching {url}: status code {response.status}")
-                return None
-
-
-async def decompress_file(file_path):
-    async with gzip.open(file_path, 'rb') as f:
-        async for chunk in f.readlines():
-            unzipped_data = chunk.decode()
-            yield unzipped_data  # Yield each chunk of decompressed data
-
-
-def decompress_file_sync(file_path):
+def decompress_file(file_path):
     with gzip.open(file_path, 'rb') as f:
         for chunk in f.readlines():
             unzipped_data = chunk.decode()
@@ -134,25 +104,15 @@ def filter_files(files, arch, include_udeb):
     return urls, names
 
 
-async def download_and_process_files(files, arch, include_udeb, output_dir):
-    urls = filter_files(files, arch, include_udeb)
-    print("urls", urls)
-    download_path = await download_files(urls, output_dir)
-
-    if download_path:
-        async for data in decompress_file(download_path):
-            await process_data(data)
-
-
-def download_and_process_files_sync(files, arch, include_udeb, output_dir, skip_download):
+def download_and_process_files(files, arch, include_udeb, output_dir, skip_download):
     # package_stats_dict = defaultdict(list)
     package_stats_dict = defaultdict(int)
     urls, names = filter_files(files, arch, include_udeb)
     print("urls", urls)
-    download_paths = download_files_sync(urls, output_dir, skip_download)
+    download_paths = download_files(urls, output_dir, skip_download)
 
     for download_path in download_paths:
-        for data in decompress_file_sync(download_path):
+        for data in decompress_file(download_path):
             file_name, packages_list = process_data(data)
             for package in packages_list:
                 # package_stats_dict[package].append(file_name)
@@ -169,27 +129,17 @@ def return_stats(package_stats, descending, count):
     return "\n".join(output)
 
 
-async def main():
-    files = get_contents_file_list(
-        "http://ftp.uk.debian.org/debian/dists/stable/main/")
-    files = process_contents_file_list(
-        "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
-    # print(files)
-    await download_and_process_files(files, "amd64", True, "./downloads")
-
-
-def main_sync():
+def main():
     files = get_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/")
     files = process_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
     # print("files", files)
-    stats_dict = download_and_process_files_sync(
+    stats_dict = download_and_process_files(
         files, "mipsel", True, "./downloads", 10)
     stats = return_stats(stats_dict, True, 20)
     print(stats)
 
 
 if __name__ == "__main__":
-    # asyncio.run(main())
-    main_sync()
+    main()
