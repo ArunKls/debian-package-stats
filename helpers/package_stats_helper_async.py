@@ -1,5 +1,4 @@
-import requests
-from bs4 import BeautifulSoup
+from common_utils import *
 from collections import defaultdict
 import os
 import asyncio
@@ -7,44 +6,11 @@ import aiohttp
 import aiofiles
 import gzip
 import time
-import subprocess
 
-PARTITION = 100000
+PARTITION = 5000
 SEC_IN_DAY = 86400
+MIRROR = "http://ftp.uk.debian.org/debian/dists/stable/main/"
 package_stats_dict = defaultdict(int)
-
-
-def get_contents_file_list(url):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Check for errors in the HTTP response
-
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        file_links = soup.find_all('a', href=True)
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
-    return file_links
-
-
-def process_contents_file_list(url, file_links):
-    files = defaultdict(list)
-    for link in file_links:
-        file_url = link['href']
-        if file_url.endswith(".gz"):
-            file_name = link.text
-            file_name_wo_ext, ext = os.path.splitext(file_name)
-            file_name_split = file_name_wo_ext.split("-")
-            arch = file_name_split[-1]
-            files[arch].append(
-                {
-                    "name": link['href'],
-                    "link": os.path.join(url, link.text),
-                    "udeb": "udeb" in file_name_split
-                }
-            )
-    return files
 
 
 async def download_and_process_file(url, output_dir, skip_download):
@@ -53,7 +19,7 @@ async def download_and_process_file(url, output_dir, skip_download):
 
 
 async def download_file(url, output_dir, skip_download):
-    print("Downloading file", url)
+    # print("Downloading file", url)
     file_name = os.path.basename(url)
     output_path = os.path.join(output_dir, file_name)
     if skip_download:
@@ -79,7 +45,8 @@ async def download_file(url, output_dir, skip_download):
 
 
 async def process_file(file_path):
-    print("Processing file", file_path)
+    # await asyncio.sleep(random.randint(0, 20))
+    # print("Processing file", file_path)
     tasks = []
     with gzip.open(file_path, 'rb') as f:
         buffer = []
@@ -95,11 +62,12 @@ async def process_file(file_path):
         # print("buffer left", len(buffer))
         tasks.append(mapper(buffer))
     await asyncio.gather(*tasks)
-    print("Processed file", file_path)
+    # print("Processed file", file_path)
 
 
 async def mapper(lines):
-    print("mapper", len(lines))
+    # await asyncio.sleep(random.randint(0, 20))
+    # print("mapper", len(lines))
     for line in lines:
         line = line.strip()
         file_name, package_names = line.rsplit(maxsplit=1)
@@ -108,31 +76,7 @@ async def mapper(lines):
             return
         for package in package_names_list:
             package_stats_dict[package] += 1
-    print("mapper done")
-
-
-def filter_files(files, arch, include_udeb):
-    urls = []
-    names = []
-    # print(files.keys(), arch in files.keys())
-    # for file in files[arch]:
-    #     if include_udeb or (not file.get("udeb")):
-    #         urls.append(file.get("link"))
-    #         names.append(file.get("name"))
-    for arch in files.keys():
-        for file in files[arch]:
-            urls.append(file.get("link"))
-            names.append(file.get("name"))
-    return urls, names
-
-
-def return_stats(package_stats, descending, count):
-    sorted_stats = sorted(package_stats.items(),
-                          key=lambda x: x[1], reverse=descending)
-    output = [f"{'Package':50} \t File Count"]
-    for line in range(min(count, len(sorted_stats))):
-        output.append(f"{sorted_stats[line][0]:50} \t {sorted_stats[line][1]}")
-    return "\n".join(output)
+    # print("mapper done")
 
 
 async def download_and_process_files(files, arch, include_udeb, output_dir, skip_download):
@@ -147,16 +91,65 @@ async def download_and_process_files(files, arch, include_udeb, output_dir, skip
 
 async def main():
     start = time.time()
-    files = get_contents_file_list(
-        "http://ftp.uk.debian.org/debian/dists/stable/main/")
-    files = process_contents_file_list(
-        "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
+    files = get_contents_file_list(MIRROR)
+    files = process_contents_file_list(MIRROR, files)
     # print(files)
-    await download_and_process_files(files, "amd64", True, "./downloads", 0)
+    await download_and_process_files(files, "amd64", True, "./downloads", 10)
     stats = return_stats(package_stats_dict, True, 20)
     print(stats)
-    print(time.time()-start)
+    print("Time taken:", time.time()-start)
 
+def package_stats(arch, mirror, include_udeb, limit, output_dir, skip_download):
+    files = get_contents_file_list(mirror)
+    files = process_contents_file_list(mirror, files)
+    asyncio.run(download_and_process_files(files, arch, include_udeb, output_dir, skip_download))
+    stats = return_stats(package_stats_dict, True, limit)
+    print(stats)
+
+
+def cli():
+    argparser = argparse.ArgumentParser(
+        description="CLI tool to get the package statistics of debian packages given architecture."
+    )
+    argparser.add_argument(
+        "architecture", type=str,
+        help="Architecture of the packages to parse.")
+    argparser.add_argument(
+        "-m", "--mirror_url", type=str,
+        default="http://ftp.uk.debian.org/debian/dists/stable/main/",
+        help=(
+            "Mirror URL for contents files. "
+            "DEFAULT: http://ftp.uk.debian.org/debian/dists/stable/main/")
+    )
+    argparser.add_argument(
+        "-u", "--udeb",
+        help=("Include udeb file for architecture. "
+              "DEFAULT: False"),
+        action="store_true"
+    )
+    argparser.add_argument(
+        "-l", "--limit", type=int, default=10,
+        help=("Top l number of packages with maximum count of files.",
+              "DEFAULT: 10"
+              )
+    )
+    argparser.add_argument(
+        "-o", "--output-dir", type=str, default=os.path.join(os.getcwd(), "downloads"),
+        help=(
+            "Download location for content files"
+            "DEFAULT: current-working-directory/downloads"
+        )
+    )
+    argparser.add_argument(
+        "-s", "--skip-download", type=int, default=0,
+        help=(
+            "Skip download if files are already present and newer than s days",
+            "DEFAULT: 10"
+        ),
+    )
+    args = argparser.parse_args()
+    package_stats(arch=args.architecture, mirror=args.mirror_url, include_udeb=args.udeb,
+         limit=args.limit, output_dir=args.output_dir, skip_download=args.skip_download)
 
 if __name__ == "__main__":
     asyncio.run(main())
