@@ -34,14 +34,13 @@ SEC_IN_DAY = 86400
 MIRROR = "http://ftp.uk.debian.org/debian/dists/stable/main/"
 
 
-def download_files(urls, output_dir, skip_download=None):
+def download_files(urls, output_dir):
     """
     Download files from the provided URLs asynchronously.
 
     Args:
         urls (list): List of URLs to download.
         output_dir (str): Directory where the files will be stored.
-        skip_download (int): Number of days to skip download if the file exists and is recent.
 
     Returns:
         list: List of paths to the downloaded files.
@@ -54,13 +53,6 @@ def download_files(urls, output_dir, skip_download=None):
         for url in urls:
             file_name = os.path.basename(url)
             output_path = os.path.join(output_dir, file_name)
-            if skip_download:
-                if os.path.exists(output_path):
-                    time_since_download = time.time() - os.path.getmtime(output_path)
-                    if time_since_download < skip_download * SEC_IN_DAY:
-                        # print("Found file. Skipping download")
-                        output_paths.append(output_path)
-                        continue
             # Stream for large files
             response = requests.get(url, stream=True, timeout=10)
 
@@ -121,7 +113,7 @@ def process_data(line):
     return []
 
 
-def download_and_process_files(files, arch, include_udeb, output_dir, skip_download):
+def download_and_process_files(files, arch, include_udeb, output_dir):
     """
     Download and process multiple files asynchronously.
 
@@ -130,7 +122,6 @@ def download_and_process_files(files, arch, include_udeb, output_dir, skip_downl
         arch (str): Architecture of the packages to parse.
         include_udeb (bool): Flag to include udeb files for architecture.
         output_dir (str): Download location for content files.
-        skip_download (int): Skip download if files are already present and newer than 's' days.
 
     Returns:
         dict: Dictionary containing package statistics.
@@ -141,7 +132,7 @@ def download_and_process_files(files, arch, include_udeb, output_dir, skip_downl
     package_stats_dict = defaultdict(int)
     urls = filter_files(files, arch, include_udeb)
     # print("urls", urls)
-    download_paths = download_files(urls, output_dir, skip_download)
+    download_paths = download_files(urls, output_dir)
 
     for download_path in download_paths:
         for data in decompress_file(download_path):
@@ -164,7 +155,7 @@ def main():
     files = process_contents_file_list(MIRROR, files)
     # print("files", files)
     stats_dict = download_and_process_files(
-        files, "arm64", True, "./downloads", 10)
+        files, "arm64", True, "./downloads")
     stats = return_stats(stats_dict, True, 20)
     print(stats)
     print(time.time() - start)

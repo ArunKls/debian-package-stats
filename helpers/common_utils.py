@@ -65,7 +65,8 @@ def process_contents_file_list(url, file_links):
         file_url = link['href']
         if file_url.endswith(".gz"):
             file_name = link.text
-            file_name_wo_ext, ext = os.path.splitext(file_name)
+            # split file name by extionsion and get architecture
+            file_name_wo_ext, _ext = os.path.splitext(file_name)
             file_name_split = file_name_wo_ext.split("-")
             arch = file_name_split[-1]
             # construct dictionary indexed by architecture
