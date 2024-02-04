@@ -97,8 +97,12 @@ def filter_files(files, arch, include_udeb):
     urls = []
     names = []
     # print(files.keys(), arch in files.keys())
-    for file in files[arch]:
-        if include_udeb or (not file.get("udeb")):
+    # for file in files[arch]:
+    #     if include_udeb or (not file.get("udeb")):
+    #         urls.append(file.get("link"))
+    #         names.append(file.get("name"))
+    for arch in files.keys():
+        for file in files[arch]:
             urls.append(file.get("link"))
             names.append(file.get("name"))
     return urls, names
@@ -108,7 +112,7 @@ def download_and_process_files(files, arch, include_udeb, output_dir, skip_downl
     # package_stats_dict = defaultdict(list)
     package_stats_dict = defaultdict(int)
     urls, names = filter_files(files, arch, include_udeb)
-    print("urls", urls)
+    # print("urls", urls)
     download_paths = download_files(urls, output_dir, skip_download)
 
     for download_path in download_paths:
@@ -130,15 +134,17 @@ def return_stats(package_stats, descending, count):
 
 
 def main():
+    start = time.time()
     files = get_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/")
     files = process_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
     # print("files", files)
     stats_dict = download_and_process_files(
-        files, "mipsel", True, "./downloads", 10)
+        files, "amd64", True, "./downloads", 10)
     stats = return_stats(stats_dict, True, 20)
     print(stats)
+    print(time.time() - start)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,11 @@ import aiohttp
 import aiofiles
 import gzip
 import time
+import subprocess
+
+PARTITION = 100000
+SEC_IN_DAY = 86400
+package_stats_dict = defaultdict(int)
 
 
 def get_contents_file_list(url):
@@ -42,16 +47,21 @@ def process_contents_file_list(url, file_links):
     return files
 
 
-async def download_and_process_file(url, output_dir):
-    download_path = await download_file(url, output_dir)
-    if download_path:
-        await decompress_file(download_path)
-        # async for data in decompress_file(download_path):
-        #     await process_data(data)
+async def download_and_process_file(url, output_dir, skip_download):
+    download_path = await download_file(url, output_dir, skip_download)
+    await process_file(download_path)
 
 
-async def download_file(url, output_dir):
+async def download_file(url, output_dir, skip_download):
     print("Downloading file", url)
+    file_name = os.path.basename(url)
+    output_path = os.path.join(output_dir, file_name)
+    if skip_download:
+        if os.path.exists(output_path):
+            time_since_download = time.time() - os.path.getmtime(output_path)
+            if time_since_download < skip_download * SEC_IN_DAY:
+                # print("Found file. Skipping download")
+                return output_path
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status == 200:
@@ -68,26 +78,49 @@ async def download_file(url, output_dir):
                 return None
 
 
-async def decompress_file(file_path):
-    print("Decompressing file", file_path)
-    await asyncio.sleep(1)
-    print("Decompressed file", file_path)
-    # async with gzip.open(file_path, 'rb') as f:
-    #     async for chunk in f.readlines():
-    #         unzipped_data = chunk.decode()
-    #         yield unzipped_data  # Yield each chunk of decompressed data
+async def process_file(file_path):
+    print("Processing file", file_path)
+    tasks = []
+    with gzip.open(file_path, 'rb') as f:
+        buffer = []
+        for line in f.readlines():
+            buffer.append(line.decode())
+            if len(buffer) < PARTITION:
+                continue
+            else:
+                # print(len(buffer))
+                tasks.append(mapper(buffer))
+                buffer = []
+                # yield task
+        # print("buffer left", len(buffer))
+        tasks.append(mapper(buffer))
+    await asyncio.gather(*tasks)
+    print("Processed file", file_path)
 
 
-async def process_data(line):
-    pass
+async def mapper(lines):
+    print("mapper", len(lines))
+    for line in lines:
+        line = line.strip()
+        file_name, package_names = line.rsplit(maxsplit=1)
+        package_names_list = package_names.split(",")
+        if file_name == 'EMPTY_PACKAGE':
+            return
+        for package in package_names_list:
+            package_stats_dict[package] += 1
+    print("mapper done")
 
 
 def filter_files(files, arch, include_udeb):
     urls = []
     names = []
     # print(files.keys(), arch in files.keys())
-    for file in files[arch]:
-        if include_udeb or (not file.get("udeb")):
+    # for file in files[arch]:
+    #     if include_udeb or (not file.get("udeb")):
+    #         urls.append(file.get("link"))
+    #         names.append(file.get("name"))
+    for arch in files.keys():
+        for file in files[arch]:
             urls.append(file.get("link"))
             names.append(file.get("name"))
     return urls, names
@@ -104,22 +137,25 @@ def return_stats(package_stats, descending, count):
 
 async def download_and_process_files(files, arch, include_udeb, output_dir, skip_download):
     # package_stats_dict = defaultdict(list)
-    package_stats_dict = defaultdict(int)
     urls, names = filter_files(files, arch, include_udeb)
-    print("urls", urls)
+    # print("urls", urls)
     tasks = []
     for url in urls:
-        tasks.append(download_and_process_file(url, output_dir))
+        tasks.append(download_and_process_file(url, output_dir, skip_download))
     await asyncio.gather(*tasks)
 
 
 async def main():
+    start = time.time()
     files = get_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/")
     files = process_contents_file_list(
         "http://ftp.uk.debian.org/debian/dists/stable/main/", files)
     # print(files)
-    await download_and_process_files(files, "amd64", True, "./downloads", False)
+    await download_and_process_files(files, "amd64", True, "./downloads", 0)
+    stats = return_stats(package_stats_dict, True, 20)
+    print(stats)
+    print(time.time()-start)
 
 
 if __name__ == "__main__":
