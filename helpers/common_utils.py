@@ -105,7 +105,7 @@ def filter_files(files, arch, include_udeb, all_files=False):
     return urls
 
 
-def return_stats(package_stats, descending, count):
+def return_stats(package_stats, descending=True, count=10):
     """
     Return formatted package statistics.
 

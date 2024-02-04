@@ -2,8 +2,6 @@
 """
 Asynchronous utility for downloading and processing Debian package files.
 Functions:
-    download_and_process_file:
-        Download a file from the given URL and process it asynchronously.
 
     download_file:
         Download a file asynchronously using aiohttp and aiofiles.
@@ -34,8 +32,10 @@ import asyncio
 import gzip
 import time
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 import aiofiles
+from .exceptions import DownloadError
 from .common_utils import (
     get_contents_file_list, process_contents_file_list, filter_files, return_stats)
 
@@ -43,21 +43,6 @@ PARTITION = 5000
 SEC_IN_DAY = 86400
 MIRROR = "http://ftp.uk.debian.org/debian/dists/stable/main/"
 package_stats_dict = defaultdict(int)
-
-
-async def download_and_process_file(url, output_dir, skip_download, tasks):
-    """
-    Download a file from the given URL and process it asynchronously.
-
-    Args:
-        url (str): The URL of the file to download.
-        output_dir (str): The directory where the downloaded file will be stored.
-        skip_download (int): Number of days to skip download if the file exists and is recent.
-        tasks (list): List of mapper tasks to await
-    """
-    # Await download and process files separately
-    download_path = await download_file(url, output_dir, skip_download)
-    await process_file(download_path, tasks)
 
 
 async def download_file(url, output_dir, skip_download):
@@ -73,6 +58,7 @@ async def download_file(url, output_dir, skip_download):
         str: The path to the downloaded file or None if the download fails.
 
     """
+    # Download file. skip if newer than skip_download days
 
     # print("Downloading file", url)
     file_name = os.path.basename(url)
@@ -84,32 +70,35 @@ async def download_file(url, output_dir, skip_download):
             if time_since_download < skip_download * SEC_IN_DAY:
                 # print("Found file. Skipping download")
                 return output_path
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                filename = os.path.basename(url)
-                output_path = os.path.join(output_dir, filename)
-                # Asynchronously write to local for download
-                async with aiofiles.open(output_path, 'wb') as f:
-                    await f.write(await response.read())
-                # print("Downloaded file", output_path)
-                return output_path
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    filename = os.path.basename(url)
+                    output_path = os.path.join(output_dir, filename)
+                    # Asynchronously write to local for download
+                    async with aiofiles.open(output_path, 'wb') as f:
+                        await f.write(await response.read())
+                    # print("Downloaded file", output_path)
+                    return output_path
 
-            else:
-                print(f"Error fetching {url}: status code {response.status}")
-                return None
+                else:
+                    raise DownloadError(url, response.status)
+    except Exception as e:
+        raise DownloadError(url, e) from e
 
 
-async def process_file(file_path, tasks):
+def process_file(file_path):
     """
     Process a gzipped file asynchronously in PARTITION sized 
     buffers and sends to mapper function.
 
     Args:
         file_path (str): The path to the gzipped file to process.
-        tasks (list): list of mapper tasks
 
     """
+    # Read and decompress file, send data in chunks to mapper
+
     # print("Processing file", file_path)
     with gzip.open(file_path, 'rb') as f:
         buffer = []
@@ -120,16 +109,15 @@ async def process_file(file_path, tasks):
                 continue
             else:
                 # Send the buffer to mapper function
-                tasks.append(mapper(buffer))
+                mapper(buffer)
                 buffer = []
         # Send the left over lines to mapper function
-        # Add tasks to tasks list for gather
-        tasks.append(mapper(buffer))
+        mapper(buffer)
 
     # print("Processed file", file_path)
 
 
-async def mapper(lines):
+def mapper(lines):
     """
     Map function to process lines from the gzipped file asynchronously.
     Counts the occurences of packages and updates dict.
@@ -137,8 +125,9 @@ async def mapper(lines):
         lines (list): List of lines from the gzipped file.
 
     """
-    # print("mapper", len(lines))
     # Process each line to split, and count package occurences
+
+    # print("mapper", len(lines))
     for line in lines:
         line = line.strip()
         file_name, package_names = line.rsplit(maxsplit=1)
@@ -151,31 +140,31 @@ async def mapper(lines):
     # print("mapper done")
 
 
-async def download_and_process_files(files, arch, include_udeb, output_dir, skip_download):
+async def download_and_process_files(urls, output_dir, skip_download):
     """
     Download and process multiple files asynchronously.
 
     Args:
-        files (list): List of file URLs to download and process.
-        arch (str): Architecture of the packages to parse.
-        include_udeb (bool): Flag to include udeb files for architecture.
+        urls (list): File URLs to download and process.
         output_dir (str): Download location for content files.
         skip_download (int): Skip download if files are already present and newer than 's' days.
 
     """
     # Filter files according to architecture
-    urls = filter_files(files, arch, include_udeb)
-    # print("urls", urls)
     tasks = []
-    mapper_tasks = []
     for url in urls:
         # Add download and process tasks to list
-        tasks.append(download_and_process_file(
-            url, output_dir, skip_download, mapper_tasks))
+        tasks.append(asyncio.create_task(
+            download_file(url, output_dir, skip_download)))
     # wait download and process tasks
-    await asyncio.gather(*tasks)
-    # wait mapper tasks
-    await asyncio.gather(*mapper_tasks)
+    for task in asyncio.as_completed(tasks):
+        try:
+            download_path = await task
+            loop = asyncio.get_event_loop()
+            executor = ThreadPoolExecutor()
+            await loop.run_in_executor(executor, process_file, download_path)
+        except DownloadError as e:
+            print(f"Task {task} failed with error: {e}")
 
 
 async def main():
@@ -186,7 +175,8 @@ async def main():
     start = time.time()
     files = get_contents_file_list(MIRROR)
     files = process_contents_file_list(MIRROR, files)
-    await download_and_process_files(files, "arm64", True, "./downloads", 10)
+    urls = filter_files(files, "arm64", True)
+    await download_and_process_files(urls, "./downloads", 10)
     stats = return_stats(package_stats_dict, True, 20)
     print(stats)
     print("Time taken:", time.time()-start)
@@ -207,8 +197,9 @@ def package_stats(arch, mirror, include_udeb, limit, output_dir, skip_download):
     """
     files = get_contents_file_list(mirror)
     files = process_contents_file_list(mirror, files)
+    urls = filter_files(files, arch, include_udeb)
     asyncio.run(download_and_process_files(
-        files, arch, include_udeb, output_dir, skip_download))
+        urls, output_dir, skip_download))
     stats = return_stats(package_stats_dict, True, limit)
     print(stats)
 

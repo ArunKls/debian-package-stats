@@ -130,7 +130,7 @@ def download_and_process_files(files, arch, include_udeb, output_dir):
     # Get the list of files and filter based on architecture and include_udeb flag
     # Download files asynchronously and process them, updating package_stats_dict
     package_stats_dict = defaultdict(int)
-    urls = filter_files(files, arch, include_udeb)
+    urls = filter_files(files, arch, include_udeb, all_files=True)
     # print("urls", urls)
     download_paths = download_files(urls, output_dir)
 

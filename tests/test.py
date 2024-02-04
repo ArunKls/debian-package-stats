@@ -48,14 +48,63 @@ class TestCommonUtils(unittest.TestCase):
         """
         Method to test valid case for process_contents_file_list
         """
-        files = {
-            'amd64': [{'name': 'file1.gz', 'link': 'https://example.com/file1.gz', 'udeb': False}],
-            'i386': [{'name': 'file2.gz', 'link': 'https://example.com/file2.gz', 'udeb': True}]
-        }
+        files = ['Contents-udeb-arch1.gz', 'Contents-udeb-arch2.gz',
+                 'Contents-arch1.gz', 'Contents-arch1.gz']
         expected_files = {
-            'amd64': [{'name': 'file1.gz', 'link': 'https://example.com/file1.gz', 'udeb': False}],
-            'i386': [{'name': 'file2.gz', 'link': 'https://example.com/file2.gz', 'udeb': True}]
+            'arch1': [
+                {'name': 'Contents-udeb-arch1.gz',
+                 'link': 'https://example.com/Contents-udeb-arch1.gz', 
+                 'udeb': True},
+                {'name': 'Contents-arch1.gz',
+                 'link': 'https://example.com/Contents-arch1.gz', 
+                 'udeb': False}],
+            'arch2': [
+                {'name': 'Contents-udeb-arch2.gz',
+                 'link': 'https://example.com/Contents-udeb-arch2.gz', 
+                 'udeb': True},
+                {'name': 'Contents-arch2.gz',
+                 'link': 'https://example.com/Contents-arch2.gz', 
+                 'udeb': False}]
         }
 
         processed_files = process_contents_file_list("https://example.com", files)
         self.assertEqual(processed_files, expected_files)
+
+    def test_filter_files_udeb(self):
+        """
+        Method to test filter files
+        """
+        files = {
+            'arch1': [
+                {'name': 'Contents-udeb-arch1.gz',
+                 'link': 'https://example.com/Contents-udeb-arch1.gz', 
+                 'udeb': True},
+                {'name': 'Contents-arch1.gz',
+                 'link': 'https://example.com/Contents-arch1.gz', 
+                 'udeb': False}],
+            'arch2': [
+                {'name': 'Contents-udeb-arch2.gz',
+                 'link': 'https://example.com/Contents-udeb-arch2.gz', 
+                 'udeb': True},
+                {'name': 'Contents-arch2.gz',
+                 'link': 'https://example.com/Contents-arch2.gz', 
+                 'udeb': False}]
+        }
+        expected_urls = ['https://example.com/Contents-udeb-arch2.gz',
+                         'https://example.com/Contents-udeb-arch2.gz']
+        urls = filter_files(files, 'arch2', include_udeb=True)
+        self.assertEqual(urls, expected_urls)
+        expected_urls = ['https://example.com/Contents-udeb-arch2.gz']
+        urls = filter_files(files, 'arch2', include_udeb=False)
+        self.assertEqual(urls, expected_urls)
+
+    def test_return_stats(self):
+        """
+        Method to test return_stats function
+        """
+        stats = {'package1': 1, 'package2': 2, 'package3': 3, 'package4': 4}
+        expected_output = [f"{'Package':50} \t File Count"]
+        expected_output.append(f"{'package4':50} \t 4")
+        expected_output.append(f"{'package3':50} \t 3")
+        output = return_stats(stats, descending=True, count=2)
+        self.assertEqual(output, expected_output)
