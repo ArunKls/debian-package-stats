@@ -49,6 +49,8 @@ def download_files(urls, output_dir):
     # Iterate through each URL and download the file asynchronously
     # If skip_download is specified, check if the file exists and is recent before downloading
     output_paths = []
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     try:
         for url in urls:
             file_name = os.path.basename(url)
@@ -130,7 +132,7 @@ def download_and_process_files(files, arch, include_udeb, output_dir):
     # Get the list of files and filter based on architecture and include_udeb flag
     # Download files asynchronously and process them, updating package_stats_dict
     package_stats_dict = defaultdict(int)
-    urls = filter_files(files, arch, include_udeb, all_files=True)
+    urls = filter_files(files, arch, include_udeb)
     # print("urls", urls)
     download_paths = download_files(urls, output_dir)
 

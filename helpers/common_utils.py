@@ -23,6 +23,7 @@ from collections import defaultdict
 import os
 import requests
 from bs4 import BeautifulSoup
+from .exceptions import DownloadError
 
 def get_contents_file_list(url):
     """
@@ -38,13 +39,12 @@ def get_contents_file_list(url):
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Check for errors in the HTTP response
-
         soup = BeautifulSoup(response.content, 'html.parser')
 
         file_links = soup.find_all('a', href=True) # Parse to find links
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+    except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+        raise DownloadError(response.status_code, e) from e
     return file_links
 
 

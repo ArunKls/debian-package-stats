@@ -62,6 +62,8 @@ async def download_file(url, output_dir, skip_download):
 
     # print("Downloading file", url)
     file_name = os.path.basename(url)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     output_path = os.path.join(output_dir, file_name)
     if skip_download:
         if os.path.exists(output_path):
@@ -107,10 +109,9 @@ def process_file(file_path):
             buffer.append(line.decode())
             if len(buffer) < PARTITION:
                 continue
-            else:
-                # Send the buffer to mapper function
-                mapper(buffer)
-                buffer = []
+            # Send the buffer to mapper function
+            mapper(buffer)
+            buffer = []
         # Send the left over lines to mapper function
         mapper(buffer)
 
@@ -177,7 +178,7 @@ async def main():
     files = process_contents_file_list(MIRROR, files)
     urls = filter_files(files, "arm64", True)
     await download_and_process_files(urls, "./downloads", 10)
-    stats = return_stats(package_stats_dict, True, 20)
+    stats = return_stats(package_stats_dict, True, 10)
     print(stats)
     print("Time taken:", time.time()-start)
 
