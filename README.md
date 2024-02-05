@@ -163,3 +163,6 @@ Time taken: 54.36145305633545
 ```
 ### Comparing results
 ![alt text](compare.png "Architecture vs execution time")
+All results from module execution on my PC: \
+CPU: 1.4 GHz Quad-Core Intel Core i5 \
+RAM: 8 GB 2133 MHz LPDDR3 \
