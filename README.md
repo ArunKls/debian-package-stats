@@ -113,7 +113,7 @@ Time taken: 4.7096991539001465
 ```
 ##### Asynchronous code
 architecture: arm64 \
-With download
+With download \
 ```$ python3 package_statistics.py arm64 -u```
 ```
 Package                                                  File Count
