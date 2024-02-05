@@ -32,7 +32,7 @@ You can use the following Debian mirror: http://ftp.uk.debian.org/debian/dists/s
 
 To setup and run this project,
 
-Install requirements> ``` pip install -r requirements.txt ```
+Install requirements> ``` pip install -r requirements.txt ``` \
 Give required permissions to execute the file
 
 ---
@@ -112,7 +112,7 @@ libdevel/liboce-modeling-dev                             7458
 Time taken: 4.7096991539001465
 ```
 ##### Asynchronous code
-architecture: arm64
+architecture: arm64 \
 With download
 ```$ python3 package_statistics.py arm64 -u```
 ```
