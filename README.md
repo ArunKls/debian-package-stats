@@ -113,9 +113,9 @@ Time taken: 4.7096991539001465
 ```
 ##### Asynchronous code
 architecture: arm64
-```
 With download
-$ python3 package_statistics.py arm6 -u
+```$ python3 package_statistics.py arm64 -u```
+```
 Package                                                  File Count
 devel/piglit                                             53007
 science/esys-particle                                    18408
@@ -130,8 +130,9 @@ libdevel/liboce-modeling-dev                             7458
 Time taken: 4.449158191680908
 ```
 Skip download
+
+```$ python3 package_statistics.py arm64 -u -s 1```
 ```
-$ python3 package_statistics.py arm6 -u -s
 Package                                                  File Count
 devel/piglit                                             53007
 science/esys-particle                                    18408
@@ -160,5 +161,5 @@ qtwebengine-opensource-src                               143418
 libdevel/libboost1.81-dev                                139104
 Time taken: 54.36145305633545
 ```
-
-
+### Comparing results
+![alt text](compare.png "Architecture vs execution time")
