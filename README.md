@@ -67,29 +67,6 @@ options:
                         than 's' days. DEFAULT: 10
 ```
 
-### Development
-
-My initial thoughts to the solution were to filter and download the required files, and process them sequentially. I quickly realized that this is slowing down the module since waiting for files to sequentially download(some of which are quite large) before processing is a huge I/O block.
-I did manage to save some time processing time by not writing from decompressed gzip to another file, rather process the data in memory. But this was inefficient as well, since I was processing large amounts of data at a time.
-This code can be seen in the ```helper\package_statistics_helper.py``` which took about 4 hours to code, along with the functions in ```helper\common_utils.py```
-
-I started reworking the code using asyncio, aiofiles and aiohttp modules which allow for asynchronous downloads and read and write from storage.
-- Used the asyncio.as_completed call to process files as soon as their download completes while other downloads happen.
-- Split the file into chunks of smaller size to pass to a mapper api, for memory efficiency.
--- experimented with the batch size. Found most efficient to be 5000 lines.
-- Added an option to skip file downloads if they are newer than input number of days, since these files may be subject to frequent changes.
-
-I took 3-4 hours for research and tests, before writing and debugging the code in 6-8 hours. These changes improved the execution time by upto 10 seconds(when downloading and fetching stats for all the files in the directory) in comparison to synchronized version. Results discussed next.
-
-Asynchronous code is single threaded where it would give me greater control in utilizing IO time for other tasks.
-I looked into the following for improving the execution:
-- multithreading: Project would not be portable subject to GIL and I would have a dependency on a multi-processor system.
-- multiprocessing: Using the python multiprocessing module to use sub-processes. I observed during testing that this module has a high overhead while spawing tasks and the latency was not suitable
-
-In total, I spent 20-24 hours in research and development of the project.
-### Testing
-
-Using python unittest module, I wrote valid and invalid unit test cases for utility functions. They test the utilities for fetching and processing the list of content files, filtering them and printing the results correctly.
 
 ## Results
 
@@ -163,6 +140,3 @@ Time taken: 54.36145305633545
 ```
 ### Comparing results
 ![alt text](compare.png "Architecture vs execution time") \
-All results from module execution on my PC: \
-- CPU: 1.4 GHz Quad-Core Intel Core i5 \
-- RAM: 8 GB 2133 MHz LPDDR3 \
